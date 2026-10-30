@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import CoreBluetooth
 import WidgetKit
+import Charts
 
 private func uuid(_ part: String) -> CBUUID { CBUUID(string: "EBE0\(part)-7A0A-4B0C-8A1A-6FF2997DA3A6") }
 private let dataUUID = uuid("CCC1"), timeUUID = uuid("CCB7"), historyUUID = uuid("CCBC")
@@ -292,6 +293,7 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
 
 struct ContentView: View {
     @ObservedObject var sensor: Sensor
+    @State private var historyView = "Graphs"
     var selectedRecords: [Record] { sensor.records.filter { $0.device == sensor.selectedID?.uuidString } }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -325,9 +327,15 @@ struct ContentView: View {
                 Button("Import sensor history") { sensor.begin(history: true) }.disabled(sensor.selectedID == nil || sensor.importing)
                 Button("Export CSV") { sensor.exportCSV() }.disabled(sensor.records.isEmpty)
             }
+            Picker("History view", selection: $historyView) {
+                Text("Graphs").tag("Graphs")
+                Text("List").tag("List")
+            }.pickerStyle(.segmented).frame(width: 180)
             if selectedRecords.isEmpty {
                 Text("No saved readings for this sensor yet. Choose a sensor above, or import its stored history.").foregroundColor(.secondary)
                 Spacer()
+            } else if historyView == "Graphs" {
+                HistoryCharts(records: selectedRecords)
             } else {
                 List(selectedRecords) { r in
                     HStack {
@@ -349,6 +357,139 @@ struct ContentView: View {
             Label(title, systemImage: icon).font(.caption).foregroundColor(.secondary)
             Text(value).font(.system(size: 26, weight: .semibold, design: .rounded))
         }.frame(maxWidth: .infinity, minHeight: 75, alignment: .leading).padding(14).background(Color.accentColor.opacity(0.09)).cornerRadius(12)
+    }
+}
+
+
+private enum GraphRange: String, CaseIterable, Identifiable {
+    case day = "24 hours", week = "7 days", month = "30 days", all = "All"
+    var id: String { rawValue }
+    var seconds: TimeInterval? {
+        switch self {
+        case .day: return 86400
+        case .week: return 604800
+        case .month: return 2592000
+        case .all: return nil
+        }
+    }
+}
+private enum GraphMode: String, CaseIterable, Identifiable {
+    case combined = "Combined", temperature = "Temperature", humidity = "Humidity", daily = "Daily range"
+    var id: String { rawValue }
+}
+private struct DailyRange: Identifiable {
+    let day: Date
+    let lowTemp: Double
+    let highTemp: Double
+    let lowHumidity: Double
+    let highHumidity: Double
+    var id: Date { day }
+}
+struct HistoryCharts: View {
+    let records: [Record]
+    @State private var range: GraphRange = .week
+    @State private var mode: GraphMode = .combined
+    private var visible: [Record] {
+        let cutoff = range.seconds.map { Date().addingTimeInterval(-$0) } ?? .distantPast
+        return records.filter { $0.date >= cutoff && $0.date <= Date() }.sorted { $0.date < $1.date }
+    }
+    private var daily: [DailyRange] {
+        let grouped = Dictionary(grouping: visible) { Calendar.current.startOfDay(for: $0.date) }
+        return grouped.keys.sorted().compactMap { day in
+            guard let values = grouped[day], let first = values.first else { return nil }
+            return DailyRange(day: day,
+                lowTemp: values.map(\.minTemp).min() ?? first.minTemp,
+                highTemp: values.map(\.maxTemp).max() ?? first.maxTemp,
+                lowHumidity: Double(values.map(\.minHumidity).min() ?? first.minHumidity),
+                highHumidity: Double(values.map(\.maxHumidity).max() ?? first.maxHumidity))
+        }
+    }
+    private var xDomain: ClosedRange<Date> {
+        let now = Date()
+        if let seconds = range.seconds { return now.addingTimeInterval(-seconds)...now }
+        let first = visible.first?.date ?? now.addingTimeInterval(-86400)
+        return min(first.addingTimeInterval(-1800), now.addingTimeInterval(-3600))...now
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Picker("Graph", selection: $mode) {
+                    ForEach(GraphMode.allCases) { Text($0.rawValue).tag($0) }
+                }.pickerStyle(.segmented)
+                Picker("Time range", selection: $range) {
+                    ForEach(GraphRange.allCases) { Text($0.rawValue).tag($0) }
+                }.frame(width: 125)
+            }
+            if visible.isEmpty {
+                Spacer()
+                Text("No readings in this period. Try a longer range or import sensor history.")
+                    .foregroundColor(.secondary).frame(maxWidth: .infinity)
+                Spacer()
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        if mode == .temperature || mode == .combined { measurementChart(isTemperature: true) }
+                        if mode == .humidity || mode == .combined { measurementChart(isTemperature: false) }
+                        if mode == .daily {
+                            dailyChart(isTemperature: true)
+                            dailyChart(isTemperature: false)
+                        }
+                    }.padding(.trailing, 6)
+                }
+                Text(mode == .daily
+                     ? "Daily ranges combine saved samples and sensor-reported hourly extremes. Partial days are shown."
+                     : "Dots and lines: app samples. Vertical bars: sensor hourly minimum–maximum. Sensor history times are estimated.")
+                    .font(.caption2).foregroundColor(.secondary)
+            }
+        }
+    }
+    private func measurementChart(isTemperature: Bool) -> some View {
+        let samples = visible.filter { $0.source == "sample" }
+        let history = visible.filter { $0.source != "sample" }
+        let color: Color = isTemperature ? .orange : .blue
+        return VStack(alignment: .leading, spacing: 5) {
+            Text(isTemperature ? "Temperature · °C" : "Humidity · %").font(.subheadline.weight(.semibold))
+            Chart {
+                ForEach(history) { record in
+                    RuleMark(x: .value("Time", record.date),
+                             yStart: .value("Minimum", isTemperature ? record.minTemp : Double(record.minHumidity)),
+                             yEnd: .value("Maximum", isTemperature ? record.maxTemp : Double(record.maxHumidity)))
+                        .foregroundStyle(color.opacity(0.48)).lineStyle(StrokeStyle(lineWidth: 3))
+                    PointMark(x: .value("Time", record.date),
+                              y: .value("Minimum", isTemperature ? record.minTemp : Double(record.minHumidity)))
+                        .foregroundStyle(color.opacity(0.45)).symbolSize(12)
+                }
+                ForEach(samples) { record in
+                    LineMark(x: .value("Time", record.date),
+                             y: .value("Reading", isTemperature ? record.minTemp : Double(record.minHumidity)))
+                        .foregroundStyle(color)
+                    PointMark(x: .value("Time", record.date),
+                              y: .value("Reading", isTemperature ? record.minTemp : Double(record.minHumidity)))
+                        .foregroundStyle(color).symbolSize(22)
+                }
+            }
+            .chartXScale(domain: xDomain)
+            .chartYScale(domain: isTemperature ? .automatic(includesZero: false) : .automatic(includesZero: true))
+            .frame(height: 160)
+        }
+    }
+    private func dailyChart(isTemperature: Bool) -> some View {
+        let color: Color = isTemperature ? .orange : .blue
+        return VStack(alignment: .leading, spacing: 5) {
+            Text(isTemperature ? "Daily temperature range · °C" : "Daily humidity range · %").font(.subheadline.weight(.semibold))
+            Chart(daily) { day in
+                RuleMark(x: .value("Day", day.day, unit: .day),
+                         yStart: .value("Minimum", isTemperature ? day.lowTemp : day.lowHumidity),
+                         yEnd: .value("Maximum", isTemperature ? day.highTemp : day.highHumidity))
+                    .foregroundStyle(color.opacity(0.75)).lineStyle(StrokeStyle(lineWidth: 5))
+                PointMark(x: .value("Day", day.day, unit: .day),
+                          y: .value("Minimum", isTemperature ? day.lowTemp : day.lowHumidity))
+                    .foregroundStyle(color).symbolSize(24)
+                PointMark(x: .value("Day", day.day, unit: .day),
+                          y: .value("Maximum", isTemperature ? day.highTemp : day.highHumidity))
+                    .foregroundStyle(color).symbolSize(24)
+            }.frame(height: 160)
+        }
     }
 }
 
