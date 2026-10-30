@@ -17,4 +17,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v1.1.0 build/Xiaomi-Sensor.dmg --target "$GITHUB_SHA" --title "Xiaomi Sensor 1.1.0" --notes "Adds a native macOS desktop widget. Requires macOS 14 or newer. Widget refreshes are managed by macOS; keep the app running for sensor readings. This ad-hoc signed build is not notarized. Hardware connection and widget registration have not been verified."
+          gh release create v1.2.0 build/Xiaomi-Sensor.dmg --target "$GITHUB_SHA" --title "Xiaomi Sensor 1.2.0" --notes "Adds adjustable scheduled readings, sensor history import, local storage and CSV export. Keep the app open and the Mac awake. Original-firmware history timestamps are estimated and imports can take minutes. Requires macOS 14 or newer. This ad-hoc signed build is not notarized. Bluetooth, history import and widget behavior have not been tested on physical hardware."
