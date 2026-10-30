@@ -17,4 +17,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v1.6.0 build/Xiaomi-Sensor.dmg --target "$GITHUB_SHA" --title "Xiaomi Sensor 1.6.0" --notes "Adjusts the native widget to match the Xiaomi sensor's gray screen, outer bezel and face-left humidity-right layout. Requires macOS 14 or newer. Install in Applications and open once before adding the widget. The app is ad-hoc signed and not notarized; widget discovery and the revised appearance have not been verified on a physical Mac."
+          gh release create v1.7.0 build/Xiaomi-Sensor.dmg --target "$GITHUB_SHA" --title "Xiaomi Sensor 1.7.0" --notes "Keeps scheduled Bluetooth monitoring running in the menu bar after the window closes, with a menu to reopen or quit and checks resuming after sleep. Quitting the app stops monitoring. Widget refresh timing is controlled by macOS. Requires macOS 14 or newer. Install in Applications and open once before adding the widget. The app is ad-hoc signed and not notarized; widget discovery and the revised appearance have not been verified on a physical Mac."
