@@ -222,7 +222,12 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
             finish("Reading saved.")
         } else if c.uuid == timeUUID && wantsHistory {
             guard b.count >= 4 else { finish("Invalid sensor uptime."); return }
-            bootTime = Date().addingTimeInterval(-Double(u32(b, 0)))
+            let estimate = Date().addingTimeInterval(-Double(u32(b, 0)))
+            let key = "bootTime-" + p.identifier.uuidString
+            let previous = UserDefaults.standard.double(forKey: key)
+            let stable = previous > 0 && abs(previous - estimate.timeIntervalSince1970) < 120 ? previous : estimate.timeIntervalSince1970
+            UserDefaults.standard.set(stable, forKey: key)
+            bootTime = Date(timeIntervalSince1970: stable)
             receivedTime = true
             startHistoryIfReady(p)
         } else if c.uuid == historyUUID && wantsHistory {
@@ -278,7 +283,7 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
         let iso = ISO8601DateFormatter()
         var csv = "time_utc,source,sensor_id,min_temp_c,max_temp_c,min_humidity_percent,max_humidity_percent,voltage_v\n"
         for r in records.sorted(by: { $0.date < $1.date }) {
-            csv += "\(iso.string(from: r.date)),\(r.source),\(r.device),\(r.minTemp),\(r.maxTemp),\(r.minHumidity),\(r.maxHumidity),\(r.voltage.map(String.init) ?? "")\n"
+            csv += "\(iso.string(from: r.date)),\(r.source),\(r.device),\(r.minTemp),\(r.maxTemp),\(r.minHumidity),\(r.maxHumidity),\(r.voltage.map { String($0) } ?? "")\n"
         }
         do { try csv.write(to: url, atomically: true, encoding: .utf8); status = "History exported." }
         catch { status = "Export failed: \(error.localizedDescription)" }
