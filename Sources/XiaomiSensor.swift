@@ -76,6 +76,11 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
         if let s = UserDefaults.standard.string(forKey: "selectedSensorUUID") { selectedID = UUID(uuidString: s) }
         load()
         manager = CBCentralManager(delegate: self, queue: .main)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
+    }
+    @objc private func didWake() {
+        guard !busy, let due = nextCheck, due <= Date(), selectedID != nil, manager.state == .poweredOn else { return }
+        begin(history: false)
     }
     private func load() {
         guard let data = try? Data(contentsOf: archiveURL),
@@ -349,7 +354,7 @@ struct ContentView: View {
                     }
                 }
             }
-            Text("Keep the app open and the Mac awake for scheduled checks. Stored sensor history times are estimated. Widget refresh timing is controlled by macOS.").font(.caption).foregroundColor(.secondary)
+            Text("Closing this window keeps the app running in the menu bar. Quit from the menu bar to stop monitoring. Checks resume after sleep; widget refresh timing is controlled by macOS.").font(.caption).foregroundColor(.secondary)
         }.padding(24).frame(minWidth: 680, minHeight: 560)
     }
     private func metric(_ title: String, _ value: String, _ icon: String) -> some View {
@@ -493,7 +498,41 @@ struct HistoryCharts: View {
     }
 }
 
+final class ApplicationDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        ProcessInfo.processInfo.disableAutomaticTermination("Scheduled sensor monitoring")
+    }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+}
+
+struct SensorMenu: View {
+    @ObservedObject var sensor: Sensor
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Button("Open Xiaomi Sensor") {
+            openWindow(id: "main")
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        if let reading = sensor.reading {
+            Text(String(format: "%.1f °C · %d%%", reading.temperature, reading.humidity))
+        } else {
+            Text("No reading yet")
+        }
+        Text(sensor.status)
+        if let next = sensor.nextCheck {
+            Text("Next check: \(next.formatted(date: .omitted, time: .shortened))")
+        }
+        Button("Read now") { sensor.begin(history: false) }.disabled(sensor.selectedID == nil || sensor.importing)
+        Divider()
+        Button("Quit Xiaomi Sensor") { NSApp.terminate(nil) }
+    }
+}
+
 @main struct XiaomiSensorApp: App {
+    @NSApplicationDelegateAdaptor(ApplicationDelegate.self) private var appDelegate
     @StateObject private var sensor = Sensor()
-    var body: some Scene { WindowGroup { ContentView(sensor: sensor) } }
+    var body: some Scene {
+        Window("Xiaomi Sensor", id: "main") { ContentView(sensor: sensor) }
+        MenuBarExtra("Xiaomi Sensor", systemImage: "thermometer.medium") { SensorMenu(sensor: sensor) }
+    }
 }
