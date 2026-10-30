@@ -82,7 +82,7 @@ struct ComfortFace: View {
             p.addQuadCurve(to: CGPoint(x: w * 0.12, y: h * 0.95), control: CGPoint(x: w * -0.02, y: h * 0.50))
             p.move(to: CGPoint(x: w * 0.88, y: h * 0.05))
             p.addQuadCurve(to: CGPoint(x: w * 0.88, y: h * 0.95), control: CGPoint(x: w * 1.02, y: h * 0.50))
-            for x: CGFloat in [0.29, 0.70] {
+            for x in [CGFloat(0.29), CGFloat(0.70)] {
                 p.move(to: CGPoint(x: w * (x - 0.07), y: h * 0.40))
                 p.addLine(to: CGPoint(x: w * x, y: h * (happy ? 0.25 : 0.40)))
                 p.addLine(to: CGPoint(x: w * (x + 0.07), y: h * 0.40))
