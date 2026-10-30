@@ -1,19 +1,19 @@
 # Xiaomi Sensor for macOS
 
-A native macOS monitor for the Xiaomi LYWSD03MMC Bluetooth thermometer and hygrometer. It shows temperature, humidity, battery voltage, last update time, connection status, and a floating widget. Select a nearby sensor once; the app remembers it and attempts to reconnect.
+A native Bluetooth monitor for Xiaomi LYWSD03MMC, with a macOS desktop widget. Requires macOS 14 Sonoma or newer. The app supports Apple silicon and Intel.
 
-## Download and install
+## Installation
 
-Download the DMG from the latest successful **Build macOS DMG** run under [Actions](../../actions) (GitHub sign-in may be required). Open the downloaded artifact ZIP, open the DMG and drag Xiaomi Sensor to Applications. On first launch, allow Bluetooth access. This build is not notarized by Apple; macOS may block it. Use System Settings → Privacy & Security → Open Anyway if offered.
+Download the DMG from [Releases](../../releases), open it and drag Xiaomi Sensor into Applications. Open the app and grant Bluetooth access, then select your nearby sensor. To add the widget, right-click the desktop, choose **Edit Widgets**, search for **Xiaomi Sensor** and add it. Keep the app running to collect readings.
 
-Requires macOS 12 or later and Bluetooth. Apple silicon and Intel are supported. Launch the app, wait for the sensor to appear, click Connect, then choose Floating widget. Keep the app running for live readings. Drag the widget by its title bar; close it or use the button to hide it.
+The widget displays the last recorded reading and its age. WidgetKit controls refreshes, so the widget is not continuously live. Desktop widget registration and Bluetooth connection have not been verified on physical hardware. The ad-hoc signed build is not notarized; macOS may require **System Settings → Privacy & Security → Open Anyway**. The app writes its snapshot to the widget extension's local container; access can be restricted by macOS privacy settings.
 
 ## Compatibility
 
-This version targets the original Xiaomi firmware's EBE0CCC1 characteristic and reads its notification containing temperature, humidity and voltage. It does not decrypt Xiaomi advertisements or support Zigbee and custom firmware formats. Some firmware or hardware revisions may behave differently, require pairing, or not expose this characteristic. Disconnect other apps or gateways if they already hold the sensor's connection. Readings can take time to arrive. If Bluetooth access was denied, allow it in System Settings → Privacy & Security → Bluetooth, then restart the app. No sensor firmware is modified.
+Targets the original Xiaomi firmware's EBE0CCC1 measurement notifications. It does not decrypt Xiaomi advertisements or support Zigbee and custom firmware formats. Some hardware or firmware versions may require pairing or lack the characteristic. Disconnect other clients if they hold the Bluetooth connection.
 
 Protocol references: [MiTemperature2](https://github.com/JsBergbau/MiTemperature2/blob/master/LYWSD03MMC.py), [lywsd03mmc-client](https://github.com/keks51/lywsd03mmc-client).
 
 ## Build
 
-On a Mac with Xcode command line tools: `bash scripts/build.sh`. The resulting disk image is at `build/Xiaomi-Sensor.dmg`. Builds are ad-hoc signed and not notarized. No server or cloud account is used.
+On a Mac with Xcode command line tools, run `bash scripts/build.sh`. The DMG is created at `build/Xiaomi-Sensor.dmg`. The app and extension are ad-hoc signed and not notarized.

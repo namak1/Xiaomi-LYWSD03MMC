@@ -17,4 +17,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v1.0.0 build/Xiaomi-Sensor.dmg --target "$GITHUB_SHA" --title "Xiaomi Sensor 1.0.0" --notes "First macOS release for Apple silicon and Intel. Requires macOS 12 or later. This build is ad-hoc signed and is not notarized. Bluetooth support targets the original LYWSD03MMC firmware and has not been tested with physical hardware."
+          gh release create v1.1.0 build/Xiaomi-Sensor.dmg --target "$GITHUB_SHA" --title "Xiaomi Sensor 1.1.0" --notes "Adds a native macOS desktop widget. Requires macOS 14 or newer. Widget refreshes are managed by macOS; keep the app running for sensor readings. This ad-hoc signed build is not notarized. Hardware connection and widget registration have not been verified."

@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import CoreBluetooth
+import WidgetKit
 
 private let sensorCharacteristic = CBUUID(string: "EBE0CCC1-7A0A-4B0C-8A1A-6FF2997DA3A6")
 
@@ -25,12 +26,10 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
     @Published var reading: Reading?
     @Published var lastUpdated: Date?
     @Published var selectedID: UUID?
-    @Published var showWidget = false
     private var manager: CBCentralManager!
     private var connected: CBPeripheral?
     private var retry: DispatchWorkItem?
     private var connectionTimeout: DispatchWorkItem?
-    private var widget: NSPanel?
     private let savedKey = "selectedSensorUUID"
     override init() {
         super.init()
@@ -119,36 +118,16 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
         reading = value
         lastUpdated = Date()
         status = "Connected"
-    }
-    func toggleWidget() {
-        if let panel = widget, panel.isVisible { panel.orderOut(nil); showWidget = false; return }
-        if widget == nil {
-            let panel = NSPanel(contentRect: NSRect(x: 200, y: 300, width: 270, height: 130), styleMask: [.titled, .closable, .utilityWindow, .nonactivatingPanel], backing: .buffered, defer: false)
-            panel.title = "Xiaomi Sensor"
-            panel.isFloatingPanel = true
-            panel.level = .floating
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            panel.isReleasedWhenClosed = false
-            panel.contentView = NSHostingView(rootView: WidgetView(sensor: self))
-            widget = panel
+        let path = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Containers/com.namak1.xiaomisensor.widget/Data/Library/Application Support/XiaomiSensor/reading.json")
+        do {
+            try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let payload: [String: Double] = ["temperature": value.temperature, "humidity": Double(value.humidity), "voltage": value.voltage, "timestamp": Date().timeIntervalSince1970]
+            try JSONSerialization.data(withJSONObject: payload).write(to: path, options: .atomic)
+            WidgetCenter.shared.reloadTimelines(ofKind: "XiaomiSensorWidget")
+        } catch {
+            status = "Connected; widget data could not be saved: \(error.localizedDescription)"
         }
-        widget?.makeKeyAndOrderFront(nil)
-        showWidget = true
-    }
-}
-
-struct WidgetView: View {
-    @ObservedObject var sensor: Sensor
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label(sensor.reading.map { String(format: "%.1f°C", $0.temperature) } ?? "—°C", systemImage: "thermometer")
-                Spacer()
-                Label(sensor.reading.map { "\($0.humidity)%" } ?? "—%", systemImage: "humidity")
-            }.font(.system(size: 23, weight: .semibold))
-            Text(sensor.status).font(.caption).foregroundColor(.secondary).lineLimit(2)
-            if let date = sensor.lastUpdated { Text("Updated \(date.formatted(date: .omitted, time: .shortened))").font(.caption2).foregroundColor(.secondary) }
-        }.padding(16).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 }
 
@@ -162,7 +141,7 @@ struct ContentView: View {
                     Text("Temperature & humidity monitor").foregroundColor(.secondary)
                 }
                 Spacer()
-                Button("Floating widget") { sensor.toggleWidget() }
+
             }
             HStack(spacing: 14) {
                 metric("Temperature", sensor.reading.map { String(format: "%.1f °C", $0.temperature) } ?? "—", "thermometer")
@@ -196,7 +175,7 @@ struct ContentView: View {
                 }
             }
             Spacer()
-            Text("Readings require the app to stay open. The floating widget shows the latest reading and connection status.").font(.caption).foregroundColor(.secondary)
+            Text("Keep this app open to collect readings. Add the Xiaomi Sensor widget using Edit Widgets on your desktop. Widget updates are managed by macOS.").font(.caption).foregroundColor(.secondary)
         }.padding(24).frame(minWidth: 620, minHeight: 420)
     }
     private func metric(_ title: String, _ value: String, _ icon: String) -> some View {
