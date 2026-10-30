@@ -249,7 +249,7 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
         }
     }
     private func saveWidget(_ value: Reading, _ date: Date) {
-        let path = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Containers/com.namak1.xiaomisensor.widget/Data/Library/Application Support/XiaomiSensor/reading.json")
+        let path = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Xiaomi Sensor/widget-reading.json")
         do {
             try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
             let payload: [String: Double] = ["temperature": value.temperature, "humidity": Double(value.humidity), "voltage": value.voltage, "timestamp": date.timeIntervalSince1970]

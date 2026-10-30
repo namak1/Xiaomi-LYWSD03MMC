@@ -5,9 +5,12 @@
 <key>CFBundleIdentifier</key><string>com.namak1.xiaomisensor.widget</string>
 <key>CFBundleName</key><string>Xiaomi Sensor Widget</string>
 <key>CFBundleDisplayName</key><string>Xiaomi Sensor</string>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+<key>CFBundleSupportedPlatforms</key><array><string>MacOSX</string></array>
 <key>CFBundlePackageType</key><string>XPC!</string>
-<key>CFBundleShortVersionString</key><string>1.1.0</string>
-<key>CFBundleVersion</key><string>2</string>
+<key>CFBundleShortVersionString</key><string>1.3.0</string>
+<key>CFBundleVersion</key><string>4</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSExtension</key><dict><key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string></dict>
 </dict></plist>

@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import Darwin
 
 struct SensorEntry: TimelineEntry {
     let date: Date
@@ -18,8 +19,11 @@ struct SensorProvider: TimelineProvider {
         completion(Timeline(entries: [current()], policy: .after(Date().addingTimeInterval(15 * 60))))
     }
     func current() -> SensorEntry {
-        let path = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("XiaomiSensor/reading.json")
+        guard let info = getpwuid(getuid()), let home = info.pointee.pw_dir else {
+            return SensorEntry(date: Date(), temperature: nil, humidity: nil, updated: nil)
+        }
+        let path = URL(fileURLWithPath: String(cString: home), isDirectory: true)
+            .appendingPathComponent("Library/Application Support/Xiaomi Sensor/widget-reading.json")
         guard let data = try? Data(contentsOf: path),
               let values = (try? JSONSerialization.jsonObject(with: data)) as? [String: Double],
               let temp = values["temperature"], let humidity = values["humidity"],
