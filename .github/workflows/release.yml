@@ -17,4 +17,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v1.3.0 build/Xiaomi-Sensor.dmg --target "$GITHUB_SHA" --title "Xiaomi Sensor 1.3.0" --notes "Corrects widget extension entry point and shares readings through app support storage. Requires macOS 14 or newer. Install in Applications and open once before adding the widget. The app is ad-hoc signed and not notarized; widget discovery depends on macOS and has not been verified on a physical Mac."
+          gh release create v1.4.0 build/Xiaomi-Sensor.dmg --target "$GITHUB_SHA" --title "Xiaomi Sensor 1.4.0" --notes "Redesigns the native desktop widget to resemble the LYWSD03MMC LCD, with a comfort face and segmented digits. Requires macOS 14 or newer. Install in Applications and open once before adding the widget. The app is ad-hoc signed and not notarized; widget discovery depends on macOS and has not been verified on a physical Mac."
