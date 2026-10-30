@@ -8,7 +8,7 @@ permissions:
   contents: write
 jobs:
   release:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Build DMG
@@ -17,4 +17,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v1.7.0 build/Xiaomi-Sensor.dmg --target "$GITHUB_SHA" --title "Xiaomi Sensor 1.7.0" --notes "Keeps scheduled Bluetooth monitoring running in the menu bar after the window closes, with a menu to reopen or quit and checks resuming after sleep. Quitting the app stops monitoring. Widget refresh timing is controlled by macOS. Requires macOS 14 or newer. Install in Applications and open once before adding the widget. The app is ad-hoc signed and not notarized; widget discovery and the revised appearance have not been verified on a physical Mac."
+          gh release create v1.8.0 build/Xiaomi-Sensor.dmg --target "$GITHUB_SHA" --title "Xiaomi Sensor 1.8.0" --notes "Redesigns the dashboard with compact sensor settings, clearer reading cards, and larger history graphs. Scheduled monitoring continues in the menu bar after closing the window. Quitting the app stops monitoring. Widget refresh timing is controlled by macOS. Requires macOS 14 or newer. Install in Applications and open once before adding the widget. The app is ad-hoc signed and not notarized; widget discovery and the revised appearance have not been verified on a physical Mac."
