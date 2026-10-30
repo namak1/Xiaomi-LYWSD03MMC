@@ -75,19 +75,21 @@ struct ComfortFace: View {
     let happy: Bool
     var body: some View {
         Canvas { context, size in
-            let side = min(size.width, size.height)
-            let x = (size.width - side) / 2, y = (size.height - side) / 2
-            let color = Color(red: 0.16, green: 0.18, blue: 0.16)
-            let circle = CGRect(x: x + side * 0.08, y: y + side * 0.08, width: side * 0.84, height: side * 0.84)
-            context.stroke(Path(ellipseIn: circle), with: .color(color), lineWidth: side * 0.065)
-            for eye in [0.34, 0.66] {
-                context.fill(Path(ellipseIn: CGRect(x: x + side * eye - side * 0.045, y: y + side * 0.34, width: side * 0.09, height: side * 0.09)), with: .color(color))
+            let w = size.width, h = size.height
+            let ink = Color(red: 0.12, green: 0.12, blue: 0.12)
+            var p = Path()
+            p.move(to: CGPoint(x: w * 0.12, y: h * 0.05))
+            p.addQuadCurve(to: CGPoint(x: w * 0.12, y: h * 0.95), control: CGPoint(x: w * -0.02, y: h * 0.50))
+            p.move(to: CGPoint(x: w * 0.88, y: h * 0.05))
+            p.addQuadCurve(to: CGPoint(x: w * 0.88, y: h * 0.95), control: CGPoint(x: w * 1.02, y: h * 0.50))
+            for x: CGFloat in [0.29, 0.70] {
+                p.move(to: CGPoint(x: w * (x - 0.07), y: h * 0.40))
+                p.addLine(to: CGPoint(x: w * x, y: h * (happy ? 0.25 : 0.40)))
+                p.addLine(to: CGPoint(x: w * (x + 0.07), y: h * 0.40))
             }
-            var mouth = Path()
-            mouth.move(to: CGPoint(x: x + side * 0.30, y: y + side * (happy ? 0.59 : 0.68)))
-            mouth.addQuadCurve(to: CGPoint(x: x + side * 0.70, y: y + side * (happy ? 0.59 : 0.68)),
-                               control: CGPoint(x: x + side * 0.50, y: y + side * (happy ? 0.84 : 0.52)))
-            context.stroke(mouth, with: .color(color), style: StrokeStyle(lineWidth: side * 0.065, lineCap: .round))
+            p.move(to: CGPoint(x: w * 0.41, y: h * 0.80))
+            p.addLine(to: CGPoint(x: w * 0.59, y: h * 0.80))
+            context.stroke(p, with: .color(ink), style: StrokeStyle(lineWidth: max(1, h * 0.075), lineCap: .square, lineJoin: .miter))
         }.accessibilityHidden(true)
     }
 }
@@ -102,32 +104,35 @@ struct SensorWidgetView: View {
         GeometryReader { geo in
             let unit = min(geo.size.width, geo.size.height)
             ZStack {
-                RoundedRectangle(cornerRadius: unit * 0.12).fill(Color(red: 0.97, green: 0.97, blue: 0.95))
-                RoundedRectangle(cornerRadius: unit * 0.035)
-                    .fill(Color(red: 0.79, green: 0.82, blue: 0.76))
-                    .padding(unit * 0.08)
-                VStack(spacing: unit * 0.025) {
-                    HStack(alignment: .top, spacing: unit * 0.01) {
-                        LCDNumber(value: entry.temperature.map { String(format: "%.1f", $0) } ?? "--.-")
-                        Text("°C").font(.system(size: unit * 0.13, weight: .medium, design: .rounded))
-                            .padding(.top, unit * 0.018)
-                    }.frame(height: unit * 0.34)
-                    HStack(alignment: .center, spacing: unit * 0.015) {
-                        LCDNumber(value: entry.humidity.map { String($0) } ?? "--")
-                            .frame(width: unit * 0.34, height: unit * 0.28)
-                        Text("%").font(.system(size: unit * 0.13, weight: .medium, design: .rounded))
-                        Spacer(minLength: 0)
-                        ComfortFace(happy: comfortable).frame(width: unit * 0.22, height: unit * 0.22)
-                    }.frame(height: unit * 0.29)
-                }
-                .foregroundStyle(Color(red: 0.16, green: 0.18, blue: 0.16))
-                .padding(.horizontal, unit * 0.14)
-                .padding(.vertical, unit * 0.13)
+                RoundedRectangle(cornerRadius: unit * 0.12)
+                    .fill(Color(red: 0.92, green: 0.92, blue: 0.92))
+                RoundedRectangle(cornerRadius: unit * 0.018)
+                    .fill(Color(red: 0.59, green: 0.59, blue: 0.58))
+                    .overlay(RoundedRectangle(cornerRadius: unit * 0.018)
+                        .stroke(Color.black.opacity(0.24), lineWidth: unit * 0.009))
+                    .frame(width: unit * 0.67, height: unit * 0.67)
+                    .shadow(color: .black.opacity(0.15), radius: unit * 0.012, x: 0, y: unit * 0.003)
+                LCDNumber(value: entry.temperature.map { String(format: "%.1f", $0) } ?? "--.-")
+                    .frame(width: unit * 0.48, height: unit * 0.24)
+                    .position(x: unit * 0.465, y: unit * 0.39)
+                Text("°C")
+                    .font(.system(size: unit * 0.08, weight: .medium, design: .monospaced))
+                    .position(x: unit * 0.75, y: unit * 0.45)
+                ComfortFace(happy: comfortable)
+                    .frame(width: unit * 0.27, height: unit * 0.13)
+                    .position(x: unit * 0.37, y: unit * 0.65)
+                LCDNumber(value: entry.humidity.map { String($0) } ?? "--")
+                    .frame(width: unit * 0.18, height: unit * 0.13)
+                    .position(x: unit * 0.61, y: unit * 0.65)
+                Text("%")
+                    .font(.system(size: unit * 0.065, weight: .medium, design: .monospaced))
+                    .position(x: unit * 0.745, y: unit * 0.68)
             }
+            .foregroundStyle(Color(red: 0.12, green: 0.12, blue: 0.12))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityDescription)
         }
-        .containerBackground(for: .widget) { Color(red: 0.97, green: 0.97, blue: 0.95) }
+        .containerBackground(for: .widget) { Color(red: 0.92, green: 0.92, blue: 0.92) }
     }
     private var accessibilityDescription: String {
         guard let t = entry.temperature, let h = entry.humidity else { return "Xiaomi sensor. No reading yet. Open the app and connect the sensor." }
