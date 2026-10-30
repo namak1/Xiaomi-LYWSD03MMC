@@ -299,72 +299,120 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
 struct ContentView: View {
     @ObservedObject var sensor: Sensor
     @State private var historyView = "Graphs"
+    @State private var showSettings = false
     var selectedRecords: [Record] { sensor.records.filter { $0.device == sensor.selectedID?.uuidString } }
+    private var sensorName: String {
+        guard let id = sensor.selectedID else { return "Choose sensor" }
+        return sensor.devices.first(where: { $0.identifier == id })?.name ?? "LYWSD03MMC"
+    }
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                VStack(alignment: .leading) { Text("Xiaomi Sensor").font(.largeTitle.bold()); Text("Temperature & humidity monitor").foregroundColor(.secondary) }
-                Spacer()
-                Button("Read now") { sensor.begin(history: false) }.disabled(sensor.selectedID == nil || sensor.importing)
-            }
-            HStack(spacing: 14) {
-                metric("Temperature", sensor.reading.map { String(format: "%.1f °C", $0.temperature) } ?? "—", "thermometer")
-                metric("Humidity", sensor.reading.map { "\($0.humidity) %" } ?? "—", "humidity")
-                metric("Battery voltage", sensor.reading.map { String(format: "%.2f V", $0.voltage) } ?? "—", "battery.75")
-            }
-            Text(sensor.status).font(.callout)
-            HStack {
-                Text("Check every")
-                Picker("Check interval", selection: $sensor.intervalMinutes) {
-                    Text("5 minutes").tag(5); Text("15 minutes").tag(15); Text("30 minutes").tag(30); Text("1 hour").tag(60); Text("2 hours").tag(120); Text("6 hours").tag(360); Text("12 hours").tag(720); Text("24 hours").tag(1440)
-                }.labelsHidden().frame(width: 130)
-                if let date = sensor.nextCheck { Text("Next: \(date.formatted(date: .omitted, time: .shortened))").foregroundColor(.secondary).font(.caption) }
-                Spacer()
-                Button("Scan") { sensor.scan() }
-                Menu("Sensor") {
-                    ForEach(sensor.devices, id: \.identifier) { p in Button(p.name ?? "LYWSD03MMC") { sensor.choose(p) } }
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "thermometer.medium").font(.title2).foregroundStyle(.teal)
+                    .frame(width: 42, height: 42).background(Color.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Xiaomi Sensor").font(.title2.weight(.bold))
+                    HStack(spacing: 5) {
+                        Circle().fill(sensor.selectedID == nil ? Color.secondary : Color.teal).frame(width: 6, height: 6)
+                        Text(sensor.status).lineLimit(1)
+                    }.font(.caption).foregroundStyle(.secondary)
                 }
+                Spacer(minLength: 10)
+                Button { sensor.begin(history: false) } label: { Label("Read now", systemImage: "arrow.clockwise") }
+                    .disabled(sensor.selectedID == nil || sensor.importing)
+                Button { showSettings.toggle() } label: { Image(systemName: "gearshape").frame(width: 20) }
+                    .help("Sensor and schedule settings")
+                    .popover(isPresented: $showSettings, arrowEdge: .bottom) { settings }
+            }.padding(.bottom, 18)
+            HStack(spacing: 10) {
+                metric("TEMPERATURE", sensor.reading.map { String(format: "%.1f °C", $0.temperature) } ?? "—", "thermometer.medium", .orange)
+                metric("HUMIDITY", sensor.reading.map { "\($0.humidity) %" } ?? "—", "humidity.fill", .blue)
+                metric("BATTERY VOLTAGE", sensor.reading.map { String(format: "%.2f V", $0.voltage) } ?? "—", "battery.75", .teal)
             }
-            HStack {
-                Text("History").font(.headline)
-                Text("\(selectedRecords.count) records").font(.caption).foregroundColor(.secondary)
+            HStack(spacing: 12) {
+                Label(sensorName, systemImage: "sensor")
+                if let date = sensor.lastUpdated { Text("Updated \(date.formatted(date: .omitted, time: .shortened))") }
+                if let date = sensor.nextCheck { Text("Next check \(date.formatted(date: .omitted, time: .shortened))") }
                 Spacer()
-                Button("Import sensor history") { sensor.begin(history: true) }.disabled(sensor.selectedID == nil || sensor.importing)
-                Button("Export CSV") { sensor.exportCSV() }.disabled(sensor.records.isEmpty)
-            }
-            Picker("History view", selection: $historyView) {
-                Text("Graphs").tag("Graphs")
-                Text("List").tag("List")
-            }.pickerStyle(.segmented).frame(width: 180)
+                Button("Settings") { showSettings.toggle() }.buttonStyle(.link)
+            }.font(.caption).foregroundStyle(.secondary).padding(.top, 10).padding(.bottom, 18)
+            Divider()
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("History").font(.title3.weight(.semibold))
+                    Text("\(selectedRecords.count.formatted()) saved records").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Picker("History view", selection: $historyView) {
+                    Text("Graphs").tag("Graphs")
+                    Text("List").tag("List")
+                }.labelsHidden().pickerStyle(.segmented).frame(width: 145)
+                Menu {
+                    Button("Import sensor history") { sensor.begin(history: true) }.disabled(sensor.selectedID == nil || sensor.importing)
+                    Button("Export CSV") { sensor.exportCSV() }.disabled(sensor.records.isEmpty)
+                } label: { Label("History actions", systemImage: "ellipsis.circle") }
+                    .menuStyle(.borderlessButton).fixedSize()
+            }.padding(.top, 16).padding(.bottom, 12)
             if selectedRecords.isEmpty {
-                Text("No saved readings for this sensor yet. Choose a sensor above, or import its stored history.").foregroundColor(.secondary)
-                Spacer()
+                VStack(spacing: 10) {
+                    Image(systemName: "chart.xyaxis.line").font(.system(size: 28)).foregroundStyle(.tertiary)
+                    Text("No readings yet").font(.headline)
+                    Text("Connect a sensor or import its stored history.").font(.callout).foregroundStyle(.secondary)
+                    Button("Import sensor history") { sensor.begin(history: true) }.disabled(sensor.selectedID == nil || sensor.importing)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if historyView == "Graphs" {
-                HistoryCharts(records: selectedRecords)
+                HistoryCharts(records: selectedRecords).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selectedRecords) { r in
                     HStack {
-                        VStack(alignment: .leading) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text(r.date.formatted(date: .abbreviated, time: .shortened))
-                            Text(r.source).font(.caption2).foregroundColor(.secondary)
+                            Text(r.source).font(.caption2).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text(r.minTemp == r.maxTemp ? String(format: "%.1f °C", r.minTemp) : String(format: "%.1f–%.1f °C", r.minTemp, r.maxTemp))
-                        Text(r.minHumidity == r.maxHumidity ? "\(r.minHumidity)%" : "\(r.minHumidity)–\(r.maxHumidity)%").frame(width: 90, alignment: .trailing)
-                    }
-                }
+                        Text(r.minTemp == r.maxTemp ? String(format: "%.1f °C", r.minTemp) : String(format: "%.1f–%.1f °C", r.minTemp, r.maxTemp)).monospacedDigit()
+                        Text(r.minHumidity == r.maxHumidity ? "\(r.minHumidity)%" : "\(r.minHumidity)–\(r.maxHumidity)%").frame(width: 90, alignment: .trailing).monospacedDigit()
+                    }.padding(.vertical, 3)
+                }.listStyle(.inset)
             }
-            Text("Closing this window keeps the app running in the menu bar. Quit from the menu bar to stop monitoring. Checks resume after sleep; widget refresh timing is controlled by macOS.").font(.caption).foregroundColor(.secondary)
-        }.padding(24).frame(minWidth: 680, minHeight: 560)
+        }.padding(22).frame(minWidth: 740, minHeight: 640)
     }
-    private func metric(_ title: String, _ value: String, _ icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: icon).font(.caption).foregroundColor(.secondary)
-            Text(value).font(.system(size: 26, weight: .semibold, design: .rounded))
-        }.frame(maxWidth: .infinity, minHeight: 75, alignment: .leading).padding(14).background(Color.accentColor.opacity(0.09)).cornerRadius(12)
+    private var settings: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Sensor settings").font(.headline)
+            HStack {
+                Text("Sensor")
+                Spacer()
+                Menu(sensorName) {
+                    ForEach(sensor.devices, id: \.identifier) { p in
+                        Button("\(p.name ?? "LYWSD03MMC") · \(p.identifier.uuidString.suffix(5))") { sensor.choose(p) }
+                    }
+                }.fixedSize()
+                Button("Scan") { sensor.scan() }
+            }
+            HStack {
+                Text("Check every")
+                Spacer()
+                Picker("Check every", selection: $sensor.intervalMinutes) {
+                    Text("5 minutes").tag(5); Text("15 minutes").tag(15); Text("30 minutes").tag(30); Text("1 hour").tag(60); Text("2 hours").tag(120); Text("6 hours").tag(360); Text("12 hours").tag(720); Text("24 hours").tag(1440)
+                }.labelsHidden().frame(width: 145)
+            }
+            Divider()
+            Text("Closing the window keeps monitoring in the menu bar. Quit the app to stop.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }.padding(18).frame(width: 340)
+    }
+    private func metric(_ title: String, _ value: String, _ icon: String, _ tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: icon).foregroundStyle(tint)
+                Text(title).font(.system(size: 10, weight: .semibold)).tracking(0.5).foregroundStyle(.secondary)
+            }
+            Text(value).font(.system(size: 27, weight: .semibold, design: .rounded)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+            .padding(15)
+            .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
     }
 }
-
 
 private enum GraphRange: String, CaseIterable, Identifiable {
     case day = "24 hours", week = "7 days", month = "30 days", all = "All"
@@ -423,7 +471,7 @@ struct HistoryCharts: View {
                 }.pickerStyle(.segmented)
                 Picker("Time range", selection: $range) {
                     ForEach(GraphRange.allCases) { Text($0.rawValue).tag($0) }
-                }.frame(width: 125)
+                }.labelsHidden().frame(width: 125)
             }
             if visible.isEmpty {
                 Spacer()
@@ -475,7 +523,7 @@ struct HistoryCharts: View {
             }
             .chartXScale(domain: xDomain)
             .chartYScale(domain: isTemperature ? .automatic(includesZero: false) : .automatic(includesZero: true))
-            .frame(height: 160)
+            .frame(height: mode == .combined || mode == .daily ? 190 : 280)
         }
     }
     private func dailyChart(isTemperature: Bool) -> some View {
@@ -493,7 +541,7 @@ struct HistoryCharts: View {
                 PointMark(x: .value("Day", day.day, unit: .day),
                           y: .value("Maximum", isTemperature ? day.highTemp : day.highHumidity))
                     .foregroundStyle(color).symbolSize(24)
-            }.frame(height: 160)
+            }.frame(height: mode == .combined || mode == .daily ? 190 : 280)
         }
     }
 }
@@ -532,7 +580,7 @@ struct SensorMenu: View {
     @NSApplicationDelegateAdaptor(ApplicationDelegate.self) private var appDelegate
     @StateObject private var sensor = Sensor()
     var body: some Scene {
-        Window("Xiaomi Sensor", id: "main") { ContentView(sensor: sensor) }
+        Window("Xiaomi Sensor", id: "main") { ContentView(sensor: sensor) }.defaultSize(width: 960, height: 800)
         MenuBarExtra("Xiaomi Sensor", systemImage: "thermometer.medium") { SensorMenu(sensor: sensor) }
     }
 }
