@@ -1,10 +1,10 @@
 # Xiaomi Sensor for macOS
 
-A native Bluetooth monitor for Xiaomi LYWSD03MMC, with a macOS desktop widget. Requires macOS 14 Sonoma or newer. The app supports Apple silicon and Intel.
+A native Bluetooth monitor for Xiaomi LYWSD03MMC, with a macOS desktop widget. The app connects only for scheduled readings (one hour by default) and then disconnects. Requires macOS 14 Sonoma or newer. The app supports Apple silicon and Intel.
 
 ## Installation
 
-Download the DMG from [Releases](../../releases), open it and drag Xiaomi Sensor into Applications. Open the app and grant Bluetooth access, then select your nearby sensor. To add the widget, right-click the desktop, choose **Edit Widgets**, search for **Xiaomi Sensor** and add it. Keep the app running to collect readings.
+Download the DMG from [Releases](../../releases), open it and drag Xiaomi Sensor into Applications. Open the app and grant Bluetooth access, then select your nearby sensor. To add the widget, right-click the desktop, choose **Edit Widgets**, search for **Xiaomi Sensor** and add it. Keep the app running and the Mac awake to collect scheduled readings. Choose the interval in the main window; use Read now for a manual sample. Use Import sensor history to download stored hourly minimum/maximum readings, then Export CSV to save them. Import can take several minutes. Historic timestamps are estimated from sensor uptime; a reset or firmware differences can affect dates and availability. The app does not wake a sleeping Mac.
 
 The widget displays the last recorded reading and its age. WidgetKit controls refreshes, so the widget is not continuously live. Desktop widget registration and Bluetooth connection have not been verified on physical hardware. The ad-hoc signed build is not notarized; macOS may require **System Settings → Privacy & Security → Open Anyway**. The app writes its snapshot to the widget extension's local container; access can be restricted by macOS privacy settings.
 
