@@ -2,6 +2,16 @@
 
 A native Bluetooth monitor for Xiaomi LYWSD03MMC, with a macOS desktop widget. The app connects only for scheduled readings (one hour by default) and then disconnects. Requires macOS 14 Sonoma or newer. The app supports Apple silicon and Intel.
 
+## Screenshots
+
+### Dashboard and history graphs
+
+![Xiaomi Sensor dashboard with temperature and humidity history graphs](docs/screenshots/dashboard.png)
+
+### Desktop widget
+
+![Xiaomi Sensor desktop widget](docs/screenshots/widget.png)
+
 ## Installation
 
 Download the DMG from [Releases](../../releases), open it and drag Xiaomi Sensor into Applications. Open the app and grant Bluetooth access, then select your nearby sensor. To add the widget, right-click the desktop, choose **Edit Widgets**, search for **Xiaomi Sensor** and add it. Closing the app window keeps the app running in the menu bar for scheduled readings. Use the thermometer icon to reopen the window or quit. If you quit the app completely, readings stop. Checks due during sleep resume after the Mac wakes. Choose the interval in the main window; use Read now for a manual sample. Use Import sensor history to download stored hourly minimum/maximum readings, then Export CSV to save them. Import can take several minutes. Historic timestamps are estimated from sensor uptime; a reset or firmware differences can affect dates and availability. The app does not wake a sleeping Mac.
