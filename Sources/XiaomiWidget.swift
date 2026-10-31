@@ -95,7 +95,9 @@ struct ComfortFace: View {
 }
 
 struct SensorWidgetView: View {
+    @Environment(\.widgetRenderingMode) private var renderingMode
     var entry: SensorEntry
+    private var usesTint: Bool { renderingMode != .fullColor }
     private var comfortable: Bool {
         guard let t = entry.temperature, let h = entry.humidity else { return false }
         return (19...27).contains(t) && (20...85).contains(h)
@@ -105,11 +107,11 @@ struct SensorWidgetView: View {
             let unit = min(geo.size.width, geo.size.height)
             ZStack {
                 RoundedRectangle(cornerRadius: unit * 0.12)
-                    .fill(Color(red: 0.92, green: 0.92, blue: 0.92))
+                    .fill(usesTint ? Color.clear : Color(red: 0.92, green: 0.92, blue: 0.92))
                 RoundedRectangle(cornerRadius: unit * 0.018)
-                    .fill(Color(red: 0.59, green: 0.59, blue: 0.58))
+                    .fill(usesTint ? Color.primary.opacity(0.16) : Color(red: 0.59, green: 0.59, blue: 0.58))
                     .overlay(RoundedRectangle(cornerRadius: unit * 0.018)
-                        .stroke(Color.black.opacity(0.24), lineWidth: unit * 0.009))
+                        .stroke(usesTint ? Color.primary.opacity(0.3) : Color.black.opacity(0.24), lineWidth: unit * 0.009))
                     .frame(width: unit * 0.67, height: unit * 0.67)
                     .shadow(color: .black.opacity(0.15), radius: unit * 0.012, x: 0, y: unit * 0.003)
                 LCDNumber(value: entry.temperature.map { String(format: "%.1f", $0) } ?? "--.-")
@@ -132,7 +134,7 @@ struct SensorWidgetView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityDescription)
         }
-        .containerBackground(for: .widget) { Color(red: 0.92, green: 0.92, blue: 0.92) }
+        .containerBackground(for: .widget) { if !usesTint { Color(red: 0.92, green: 0.92, blue: 0.92) } else { Color.clear } }
     }
     private var accessibilityDescription: String {
         guard let t = entry.temperature, let h = entry.humidity else { return "Xiaomi sensor. No reading yet. Open the app and connect the sensor." }
