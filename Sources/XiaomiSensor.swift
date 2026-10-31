@@ -3,9 +3,10 @@ import AppKit
 import CoreBluetooth
 import WidgetKit
 import Charts
+import ServiceManagement
 
 private func uuid(_ part: String) -> CBUUID { CBUUID(string: "EBE0\(part)-7A0A-4B0C-8A1A-6FF2997DA3A6") }
-private let dataUUID = uuid("CCC1"), timeUUID = uuid("CCB7"), historyUUID = uuid("CCBC")
+private let dataUUID = uuid("CCC1"), timeUUID = uuid("CCB7"), historyUUID = uuid("CCBC"), indexUUID = uuid("CCBA"), countUUID = uuid("CCB9")
 private func u32(_ b: [UInt8], _ i: Int) -> UInt32 {
     UInt32(b[i]) | UInt32(b[i+1]) << 8 | UInt32(b[i+2]) << 16 | UInt32(b[i+3]) << 24
 }
@@ -62,6 +63,9 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
     private var gotReading = false
     private var bootTime: Date?
     private var historyCharacteristic: CBCharacteristic?
+    private var indexCharacteristic: CBCharacteristic?
+    private var nextIndex: UInt32?
+    private var cursorStarted = false
     private var countImported = 0
     private var receivedTime = false
     private var discoveredServices = 0
@@ -97,7 +101,12 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {
         case .poweredOn:
-            if selectedID != nil { begin(history: false) } else { scan() }
+            if selectedID != nil {
+                let due = UserDefaults.standard.double(forKey: "nextCheckTimestamp")
+                if due > Date().timeIntervalSince1970 {
+                    scheduleNext(at: Date(timeIntervalSince1970: due))
+                } else { begin(history: false) }
+            } else { scan() }
         case .unauthorized: status = "Allow Bluetooth in System Settings → Privacy & Security → Bluetooth."
         case .poweredOff: status = "Bluetooth is off."
         case .unsupported: status = "Bluetooth is not supported."
@@ -127,7 +136,7 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
         }
         stopCurrent()
         busy = true; wantsHistory = history; importing = history; gotReading = false
-        bootTime = nil; historyCharacteristic = nil; countImported = 0; receivedTime = false; discoveredServices = 0
+        bootTime = nil; historyCharacteristic = nil; indexCharacteristic = nil; nextIndex = nil; cursorStarted = false; countImported = 0; receivedTime = false; discoveredServices = 0
         nextCheck = nil
         status = history ? "Connecting to import sensor history…" : "Connecting for a reading…"
         if let id = selectedID, let p = manager.retrievePeripherals(withIdentifiers: [id]).first {
@@ -181,6 +190,8 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
                 else if c.properties.contains(.read) { p.readValue(for: c) }
             } else if c.uuid == timeUUID && wantsHistory && c.properties.contains(.read) { p.readValue(for: c) }
             else if c.uuid == historyUUID && wantsHistory { historyCharacteristic = c }
+            else if c.uuid == indexUUID && wantsHistory { indexCharacteristic = c }
+            else if c.uuid == countUUID && wantsHistory && c.properties.contains(.read) { p.readValue(for: c) }
         }
         if wantsHistory { startHistoryIfReady(p) }
         if discoveredServices == 0 {
@@ -191,13 +202,40 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
         }
     }
     private func startHistoryIfReady(_ p: CBPeripheral) {
-        guard busy, wantsHistory, receivedTime, let c = historyCharacteristic, bootTime != nil else { return }
-        guard c.properties.contains(.notify) || c.properties.contains(.indicate) else { finish("History notifications are unavailable."); return }
-        receivedTime = false
+        guard busy, wantsHistory, receivedTime, let history = historyCharacteristic, let boot = bootTime,
+              let deviceNext = nextIndex, !cursorStarted else { return }
+        guard history.properties.contains(.notify) || history.properties.contains(.indicate) else {
+            finish("History notifications unavailable."); return
+        }
+        cursorStarted = true
+        let prefix = "\(p.identifier.uuidString)-\(Int(boot.timeIntervalSince1970 / 3600))-"
+        let saved = records.compactMap { record -> UInt32? in
+            guard record.source.hasPrefix("sensor history"), record.id.hasPrefix(prefix) else { return nil }
+            return UInt32(record.id.dropFirst(prefix.count))
+        }.max()
+        if let last = saved, last < UInt32.max, last + 1 >= deviceNext {
+            finish("Reading saved; history is up to date."); return
+        }
+        if let last = saved, last < UInt32.max, let index = indexCharacteristic,
+           index.properties.contains(.write) {
+            let value = last + 1
+            let data = Data([UInt8(truncatingIfNeeded: value), UInt8(truncatingIfNeeded: value >> 8),
+                             UInt8(truncatingIfNeeded: value >> 16), UInt8(truncatingIfNeeded: value >> 24)])
+            p.writeValue(data, for: index, type: .withResponse)
+        } else {
+            subscribeHistory(p, history)
+        }
+    }
+    private func subscribeHistory(_ p: CBPeripheral, _ history: CBCharacteristic) {
         timeout?.cancel()
-        p.setNotifyValue(true, for: c)
-        status = "Importing stored history…"
+        p.setNotifyValue(true, for: history)
+        status = "Importing sensor history…"
         resetHistoryTimeout()
+    }
+    func peripheral(_ p: CBPeripheral, didWriteValueFor c: CBCharacteristic, error: Error?) {
+        guard busy, wantsHistory, c.uuid == indexUUID, let history = historyCharacteristic else { return }
+        if let error = error { finish("Could not request new history: \(error.localizedDescription)"); return }
+        subscribeHistory(p, history)
     }
     private func resetHistoryTimeout() {
         historyTimeout?.cancel()
@@ -225,7 +263,14 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
             records.insert(Record(id: UUID().uuidString, device: p.identifier.uuidString, date: date, source: "sample", minTemp: value.temperature, maxTemp: value.temperature, minHumidity: value.humidity, maxHumidity: value.humidity, voltage: value.voltage), at: 0)
             guard save() else { let message = status; finish(message); return }
             let widgetSaved = saveWidget(value, date)
-            finish(widgetSaved ? "Reading saved." : "Reading saved, but widget update failed. Check macOS privacy settings.")
+            guard widgetSaved else { finish("Reading saved, but widget update failed. Check macOS privacy settings."); return }
+            // Reconnect for the sensor's stored hourly records after each sample.
+            stopCurrent()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.begin(history: true) }
+        } else if c.uuid == countUUID && wantsHistory {
+            guard b.count >= 8 else { finish("Invalid history count."); return }
+            nextIndex = u32(b, 4)
+            startHistoryIfReady(p)
         } else if c.uuid == timeUUID && wantsHistory {
             guard b.count >= 4 else { finish("Invalid sensor uptime."); return }
             let estimate = Date().addingTimeInterval(-Double(u32(b, 0)))
@@ -248,10 +293,12 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
             if !records.contains(where: { $0.id == key }) {
                 records.append(Record(id: key, device: p.identifier.uuidString, date: date, source: "sensor history (estimated)", minTemp: minTemp, maxTemp: maxTemp, minHumidity: minHum, maxHumidity: maxHum, voltage: nil))
                 countImported += 1
-                if countImported % 20 == 0 { _ = save() }
+                guard save() else { let message = status; finish(message); return }
             }
             status = "Importing stored history: \(countImported) new records…"
-            resetHistoryTimeout()
+            if let end = nextIndex, end > 0, index >= end - 1 {
+                finish("Reading and history updated: \(countImported) new records.")
+            } else { resetHistoryTimeout() }
         }
     }
     @discardableResult private func saveWidget(_ value: Reading, _ date: Date) -> Bool {
@@ -277,14 +324,16 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
         status = message
         scheduleNext()
     }
-    private func scheduleNext() {
+    private func scheduleNext(at requested: Date? = nil) {
         timer?.cancel()
         guard selectedID != nil else { nextCheck = nil; return }
         let seconds = Double(intervalMinutes * 60)
-        nextCheck = Date().addingTimeInterval(seconds)
+        let due = requested ?? Date().addingTimeInterval(seconds)
+        nextCheck = due
+        UserDefaults.standard.set(due.timeIntervalSince1970, forKey: "nextCheckTimestamp")
         let work = DispatchWorkItem { [weak self] in self?.begin(history: false) }
         timer = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, due.timeIntervalSinceNow), execute: work)
     }
     func exportCSV() {
         let panel = NSSavePanel(); panel.nameFieldStringValue = "Xiaomi-Sensor-History.csv"
@@ -383,6 +432,10 @@ struct ContentView: View {
     private var settings: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Sensor settings").font(.headline)
+            Text(SMAppService.agent(plistName: "com.namak1.xiaomisensor.background.plist").status == .enabled
+                 ? "Background monitoring: enabled"
+                 : "Background monitoring requires approval in System Settings → General → Login Items & Extensions.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Text("Sensor")
                 Spacer()
@@ -401,7 +454,7 @@ struct ContentView: View {
                 }.labelsHidden().frame(width: 145)
             }
             Divider()
-            Text("Closing the window or pressing Command-Q keeps monitoring in the menu bar. Choose Stop Monitoring and Quit in the menu bar to stop.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text("Background monitoring uses a macOS background item. Enable it in Login Items if requested.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }.padding(18).frame(width: 340)
     }
     private func metric(_ title: String, _ value: String, _ icon: String, _ tint: Color) -> some View {
@@ -552,6 +605,8 @@ struct HistoryCharts: View {
 final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     private var monitoringActivity: NSObjectProtocol?
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if CommandLine.arguments.contains("--background") { NSApp.setActivationPolicy(.accessory); DispatchQueue.main.asyncAfter(deadline: .now() + 1) { NSApp.hide(nil) } }
+        do { let service = SMAppService.agent(plistName: "com.namak1.xiaomisensor.background.plist"); if service.status == .notRegistered { try service.register() } } catch { NSLog("Background service registration failed: %@", error.localizedDescription) }
         ProcessInfo.processInfo.disableAutomaticTermination("Scheduled sensor monitoring")
         monitoringActivity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep], reason: "Scheduled Bluetooth sensor readings")
     }
@@ -566,6 +621,7 @@ struct SensorMenu: View {
     @Environment(\.openWindow) private var openWindow
     var body: some View {
         Button("Open Xiaomi Sensor") {
+            NSApp.setActivationPolicy(.regular)
             openWindow(id: "main")
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -580,7 +636,7 @@ struct SensorMenu: View {
         }
         Button("Read now") { sensor.begin(history: false) }.disabled(sensor.selectedID == nil || sensor.importing)
         Divider()
-        Button("Stop Monitoring and Quit") { NSApp.terminate(nil) }
+        Button("Quit Xiaomi Sensor") { NSApp.terminate(nil) }
     }
 }
 
@@ -592,7 +648,7 @@ struct SensorMenu: View {
             .defaultSize(width: 960, height: 800)
             .commands {
                 CommandGroup(replacing: .appTermination) {
-                    Button("Close Window and Keep Monitoring") { NSApp.hide(nil) }
+                    Button("Quit Xiaomi Sensor") { NSApp.terminate(nil) }
                         .keyboardShortcut("q", modifiers: .command)
                     Button("Stop Monitoring and Quit") { NSApp.terminate(nil) }
                 }
