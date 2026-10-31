@@ -10,7 +10,6 @@ import AppKit
         let open = Process()
         open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         open.arguments = ["-g", "-a", app.path, "--args", "--background"]
-        try? open.run()
-        open.waitUntilExit()
+        do { try open.run(); open.waitUntilExit() } catch { NSLog("Could not start sensor monitor: %@", error.localizedDescription) }
     }
 }
