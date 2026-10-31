@@ -33,37 +33,71 @@ struct SensorProvider: TimelineProvider {
         return SensorEntry(date: Date(), temperature: temp, humidity: Int(humidity), updated: Date(timeIntervalSince1970: timestamp))
     }
 }
-// Use standard SwiftUI shapes so WidgetKit can archive and render every segment.
+// Bevelled LCD segments match the physical sensor rather than a rounded digital font.
+struct LCDSegment: Shape {
+    let name: Character
+    let thin: Bool
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width, h = rect.height
+        let t = thin ? min(w * 0.10, h * 0.055) : min(w * 0.16, h * 0.09)
+        let gap = t * 0.18
+        let mid = h / 2
+        func horizontal(_ y: CGFloat) -> Path {
+            var p = Path()
+            p.move(to: CGPoint(x: t * 0.55, y: y))
+            p.addLine(to: CGPoint(x: w - t * 0.55, y: y))
+            p.addLine(to: CGPoint(x: w - t * 1.10, y: y + t))
+            p.addLine(to: CGPoint(x: t * 1.10, y: y + t))
+            p.closeSubpath()
+            return p
+        }
+        func vertical(_ x: CGFloat, _ y1: CGFloat, _ y2: CGFloat, _ left: Bool) -> Path {
+            var p = Path()
+            let outer = left ? x : x + t
+            let inner = left ? x + t : x
+            p.move(to: CGPoint(x: outer, y: y1))
+            p.addLine(to: CGPoint(x: inner, y: y1 + t * 0.55))
+            p.addLine(to: CGPoint(x: inner, y: y2 - t * 0.55))
+            p.addLine(to: CGPoint(x: outer, y: y2))
+            p.closeSubpath()
+            return p
+        }
+        switch name {
+        case "a": return horizontal(0)
+        case "g": return horizontal(mid - t / 2)
+        case "d": return horizontal(h - t)
+        case "f": return vertical(0, gap, mid - gap, true)
+        case "b": return vertical(w - t, gap, mid - gap, false)
+        case "e": return vertical(0, mid + gap, h - gap, true)
+        case "c": return vertical(w - t, mid + gap, h - gap, false)
+        default: return Path()
+        }
+    }
+}
+
 struct LCDNumber: View {
     let value: String
+    var thin = false
     private let patterns: [Character: String] = ["0":"abcdef", "1":"bc", "2":"abged", "3":"abgcd", "4":"fgbc", "5":"afgcd", "6":"afgecd", "7":"abc", "8":"abcdefg", "9":"abfgcd", "-":"g"]
     var body: some View {
         GeometryReader { geo in
             let chars = Array(value)
-            let widths = chars.map { $0 == "." ? CGFloat(7) : ($0 == "-" ? CGFloat(18) : CGFloat(30)) }
-            let total = widths.reduce(0, +) + CGFloat(max(0, chars.count - 1)) * 4
-            let scale = min(geo.size.width / max(total, 1), geo.size.height / 55)
-            HStack(spacing: 4 * scale) {
+            let widths = chars.map { $0 == "." ? CGFloat(6) : CGFloat(34) }
+            let total = widths.reduce(0, +) + CGFloat(max(0, chars.count - 1)) * 5
+            let scale = min(geo.size.width / max(total, 1), geo.size.height / 64)
+            HStack(spacing: 5 * scale) {
                 ForEach(Array(chars.enumerated()), id: \.offset) { index, char in
-                    let width = widths[index]
-                    ZStack(alignment: .topLeading) {
+                    ZStack(alignment: .bottom) {
                         if char == "." {
-                            RoundedRectangle(cornerRadius: scale).frame(width: 5 * scale, height: 5 * scale).offset(x: scale, y: 49 * scale)
+                            Rectangle().frame(width: 5 * scale, height: 5 * scale)
                         } else {
-                            let active = patterns[char] ?? ""
-                            ForEach(Array([( "a", CGFloat(4), CGFloat(0), width-8, CGFloat(5)), ("b", width-5, 4, 5, 22), ("c", width-5, 29, 5, 22), ("d", 4, 50, width-8, 5), ("e", 0, 29, 5, 22), ("f", 0, 4, 5, 22), ("g", 4, 25, width-8, 5)].enumerated()), id: \.offset) { _, segment in
-                                if active.contains(segment.0) {
-                                    RoundedRectangle(cornerRadius: 1.1 * scale)
-                                        .frame(width: segment.3 * scale, height: segment.4 * scale)
-                                        .offset(x: segment.1 * scale, y: segment.2 * scale)
-                                }
+                            ForEach(Array((patterns[char] ?? "").enumerated()), id: \.offset) { _, segment in
+                                LCDSegment(name: segment, thin: thin)
                             }
                         }
-                    }.frame(width: width * scale, height: 55 * scale)
+                    }.frame(width: widths[index] * scale, height: 64 * scale, alignment: .bottom)
                 }
-            }
-            .foregroundStyle(Color(red: 0.16, green: 0.18, blue: 0.16))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }.accessibilityHidden(true)
     }
 }
@@ -135,23 +169,23 @@ struct SensorWidgetView: View {
                     .frame(width: unit * 0.67, height: unit * 0.67)
                     .shadow(color: .black.opacity(0.15), radius: unit * 0.012, x: 0, y: unit * 0.003)
                 LCDNumber(value: entry.temperature.map { String(format: "%.1f", $0) } ?? "--.-")
-                    .frame(width: unit * 0.43, height: unit * 0.24)
+                    .frame(width: unit * 0.47, height: unit * 0.23)
                     .position(x: unit * 0.465, y: unit * 0.39)
                 BluetoothMark()
                     .stroke(style: StrokeStyle(lineWidth: unit * 0.005, lineCap: .round, lineJoin: .round))
                     .frame(width: unit * 0.025, height: unit * 0.045)
                     .position(x: unit * 0.75, y: unit * 0.30)
                 Text("°C")
-                    .font(.system(size: unit * 0.08, weight: .medium, design: .monospaced))
-                    .position(x: unit * 0.75, y: unit * 0.45)
+                    .font(.system(size: unit * 0.066, weight: .regular, design: .monospaced))
+                    .position(x: unit * 0.75, y: unit * 0.465)
                 ComfortFace(happy: comfortable)
                     .frame(width: unit * 0.27, height: unit * 0.13)
                     .position(x: unit * 0.37, y: unit * 0.65)
-                LCDNumber(value: entry.humidity.map { String($0) } ?? "--")
-                    .frame(width: unit * 0.18, height: unit * 0.13)
+                LCDNumber(value: entry.humidity.map { String($0) } ?? "--", thin: true)
+                    .frame(width: unit * 0.18, height: unit * 0.125)
                     .position(x: unit * 0.61, y: unit * 0.65)
                 Text("%")
-                    .font(.system(size: unit * 0.065, weight: .medium, design: .monospaced))
+                    .font(.system(size: unit * 0.06, weight: .regular, design: .monospaced))
                     .position(x: unit * 0.745, y: unit * 0.68)
             }
             .foregroundStyle(Color(red: 0.12, green: 0.12, blue: 0.12))
