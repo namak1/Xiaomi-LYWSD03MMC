@@ -33,64 +33,84 @@ struct SensorProvider: TimelineProvider {
         return SensorEntry(date: Date(), temperature: temp, humidity: Int(humidity), updated: Date(timeIntervalSince1970: timestamp))
     }
 }
-// A scalable seven-segment LCD, drawn in code so the reading stays sharp at widget size.
+// Use standard SwiftUI shapes so WidgetKit can archive and render every segment.
 struct LCDNumber: View {
     let value: String
+    private let patterns: [Character: String] = ["0":"abcdef", "1":"bc", "2":"abged", "3":"abgcd", "4":"fgbc", "5":"afgcd", "6":"afgecd", "7":"abc", "8":"abcdefg", "9":"abfgcd", "-":"g"]
     var body: some View {
         GeometryReader { geo in
-            Canvas { context, size in
-                let chars = Array(value)
-                guard !chars.isEmpty else { return }
-                let unitWidth: CGFloat = 30, height: CGFloat = 55, spacing: CGFloat = 4
-                let widths: [CGFloat] = chars.map { $0 == "." ? 7 : ($0 == "-" ? 18 : unitWidth) }
-                let total = widths.reduce(0, +) + spacing * CGFloat(max(0, chars.count - 1))
-                let scale = min(size.width / total, size.height / height)
-                var x = (size.width - total * scale) / 2
-                let y = (size.height - height * scale) / 2
-                let patterns: [Character: String] = ["0":"abcdef", "1":"bc", "2":"abged", "3":"abgcd", "4":"fgbc", "5":"afgcd", "6":"afgecd", "7":"abc", "8":"abcdefg", "9":"abfgcd", "-":"g"]
-                for (idx, char) in chars.enumerated() {
-                    let w = widths[idx]
-                    if char == "." {
-                        let dot = CGRect(x: x + 1 * scale, y: y + 49 * scale, width: 5 * scale, height: 5 * scale)
-                        context.fill(Path(roundedRect: dot, cornerRadius: scale), with: .color(Color(red: 0.16, green: 0.18, blue: 0.16)))
-                    } else {
-                        let active = patterns[char] ?? ""
-                        let segments: [(Character, CGFloat, CGFloat, CGFloat, CGFloat)] = [
-                            ("a",4,0,w-8,5), ("b",w-5,4,5,22), ("c",w-5,29,5,22),
-                            ("d",4,50,w-8,5), ("e",0,29,5,22), ("f",0,4,5,22), ("g",4,25,w-8,5)]
-                        for (name, sx, sy, sw, sh) in segments where active.contains(name) {
-                            let rect = CGRect(x: x + sx * scale, y: y + sy * scale, width: sw * scale, height: sh * scale)
-                            context.fill(Path(roundedRect: rect, cornerRadius: 1.1 * scale), with: .color(Color(red: 0.16, green: 0.18, blue: 0.16)))
+            let chars = Array(value)
+            let widths = chars.map { $0 == "." ? CGFloat(7) : ($0 == "-" ? CGFloat(18) : CGFloat(30)) }
+            let total = widths.reduce(0, +) + CGFloat(max(0, chars.count - 1)) * 4
+            let scale = min(geo.size.width / max(total, 1), geo.size.height / 55)
+            HStack(spacing: 4 * scale) {
+                ForEach(Array(chars.enumerated()), id: \.offset) { index, char in
+                    let width = widths[index]
+                    ZStack(alignment: .topLeading) {
+                        if char == "." {
+                            RoundedRectangle(cornerRadius: scale).frame(width: 5 * scale, height: 5 * scale).offset(x: scale, y: 49 * scale)
+                        } else {
+                            let active = patterns[char] ?? ""
+                            ForEach(Array([( "a", CGFloat(4), CGFloat(0), width-8, CGFloat(5)), ("b", width-5, 4, 5, 22), ("c", width-5, 29, 5, 22), ("d", 4, 50, width-8, 5), ("e", 0, 29, 5, 22), ("f", 0, 4, 5, 22), ("g", 4, 25, width-8, 5)].enumerated()), id: \.offset) { _, segment in
+                                if active.contains(segment.0) {
+                                    RoundedRectangle(cornerRadius: 1.1 * scale)
+                                        .frame(width: segment.3 * scale, height: segment.4 * scale)
+                                        .offset(x: segment.1 * scale, y: segment.2 * scale)
+                                }
+                            }
                         }
-                    }
-                    x += (w + spacing) * scale
+                    }.frame(width: width * scale, height: 55 * scale)
                 }
             }
+            .foregroundStyle(Color(red: 0.16, green: 0.18, blue: 0.16))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }.accessibilityHidden(true)
+    }
+}
+
+// The LCD face is made of vector strokes, matching the sensor's segmented icon.
+struct FaceStrokes: Shape {
+    var happy: Bool
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width, h = rect.height
+        var p = Path()
+        p.move(to: CGPoint(x: w * 0.12, y: h * 0.05))
+        p.addQuadCurve(to: CGPoint(x: w * 0.12, y: h * 0.95), control: CGPoint(x: w * -0.02, y: h * 0.50))
+        p.move(to: CGPoint(x: w * 0.88, y: h * 0.05))
+        p.addQuadCurve(to: CGPoint(x: w * 0.88, y: h * 0.95), control: CGPoint(x: w * 1.02, y: h * 0.50))
+        for x in [CGFloat(0.29), CGFloat(0.70)] {
+            p.move(to: CGPoint(x: w * (x - 0.07), y: h * 0.40))
+            p.addLine(to: CGPoint(x: w * x, y: h * (happy ? 0.25 : 0.40)))
+            p.addLine(to: CGPoint(x: w * (x + 0.07), y: h * 0.40))
         }
-        .accessibilityHidden(true)
+        p.move(to: CGPoint(x: w * 0.41, y: h * 0.80))
+        p.addLine(to: CGPoint(x: w * 0.59, y: h * 0.80))
+        return p
     }
 }
 
 struct ComfortFace: View {
     let happy: Bool
     var body: some View {
-        Canvas { context, size in
-            let w = size.width, h = size.height
-            let ink = Color(red: 0.12, green: 0.12, blue: 0.12)
-            var p = Path()
-            p.move(to: CGPoint(x: w * 0.12, y: h * 0.05))
-            p.addQuadCurve(to: CGPoint(x: w * 0.12, y: h * 0.95), control: CGPoint(x: w * -0.02, y: h * 0.50))
-            p.move(to: CGPoint(x: w * 0.88, y: h * 0.05))
-            p.addQuadCurve(to: CGPoint(x: w * 0.88, y: h * 0.95), control: CGPoint(x: w * 1.02, y: h * 0.50))
-            for x in [CGFloat(0.29), CGFloat(0.70)] {
-                p.move(to: CGPoint(x: w * (x - 0.07), y: h * 0.40))
-                p.addLine(to: CGPoint(x: w * x, y: h * (happy ? 0.25 : 0.40)))
-                p.addLine(to: CGPoint(x: w * (x + 0.07), y: h * 0.40))
-            }
-            p.move(to: CGPoint(x: w * 0.41, y: h * 0.80))
-            p.addLine(to: CGPoint(x: w * 0.59, y: h * 0.80))
-            context.stroke(p, with: .color(ink), style: StrokeStyle(lineWidth: max(1, h * 0.075), lineCap: .square, lineJoin: .miter))
+        GeometryReader { geo in
+            FaceStrokes(happy: happy)
+                .stroke(style: StrokeStyle(lineWidth: max(1, geo.size.height * 0.075), lineCap: .square, lineJoin: .miter))
         }.accessibilityHidden(true)
+    }
+}
+
+struct BluetoothMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        let w = rect.width, h = rect.height
+        var p = Path()
+        p.move(to: CGPoint(x: w * 0.5, y: 0))
+        p.addLine(to: CGPoint(x: w * 0.5, y: h))
+        p.addLine(to: CGPoint(x: w * 0.85, y: h * 0.74))
+        p.addLine(to: CGPoint(x: w * 0.15, y: h * 0.27))
+        p.move(to: CGPoint(x: w * 0.15, y: h * 0.73))
+        p.addLine(to: CGPoint(x: w * 0.85, y: h * 0.26))
+        p.addLine(to: CGPoint(x: w * 0.5, y: 0))
+        return p
     }
 }
 
@@ -115,8 +135,12 @@ struct SensorWidgetView: View {
                     .frame(width: unit * 0.67, height: unit * 0.67)
                     .shadow(color: .black.opacity(0.15), radius: unit * 0.012, x: 0, y: unit * 0.003)
                 LCDNumber(value: entry.temperature.map { String(format: "%.1f", $0) } ?? "--.-")
-                    .frame(width: unit * 0.48, height: unit * 0.24)
+                    .frame(width: unit * 0.43, height: unit * 0.24)
                     .position(x: unit * 0.465, y: unit * 0.39)
+                BluetoothMark()
+                    .stroke(style: StrokeStyle(lineWidth: unit * 0.005, lineCap: .round, lineJoin: .round))
+                    .frame(width: unit * 0.025, height: unit * 0.045)
+                    .position(x: unit * 0.75, y: unit * 0.30)
                 Text("°C")
                     .font(.system(size: unit * 0.08, weight: .medium, design: .monospaced))
                     .position(x: unit * 0.75, y: unit * 0.45)
