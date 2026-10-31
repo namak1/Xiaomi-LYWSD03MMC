@@ -224,8 +224,8 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
             let date = Date()
             records.insert(Record(id: UUID().uuidString, device: p.identifier.uuidString, date: date, source: "sample", minTemp: value.temperature, maxTemp: value.temperature, minHumidity: value.humidity, maxHumidity: value.humidity, voltage: value.voltage), at: 0)
             guard save() else { let message = status; finish(message); return }
-            saveWidget(value, date)
-            finish("Reading saved.")
+            let widgetSaved = saveWidget(value, date)
+            finish(widgetSaved ? "Reading saved." : "Reading saved, but widget update failed. Check macOS privacy settings.")
         } else if c.uuid == timeUUID && wantsHistory {
             guard b.count >= 4 else { finish("Invalid sensor uptime."); return }
             let estimate = Date().addingTimeInterval(-Double(u32(b, 0)))
@@ -254,14 +254,17 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
             resetHistoryTimeout()
         }
     }
-    private func saveWidget(_ value: Reading, _ date: Date) {
+    @discardableResult private func saveWidget(_ value: Reading, _ date: Date) -> Bool {
         let path = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Xiaomi Sensor/widget-reading.json")
         do {
             try FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
             let payload: [String: Double] = ["temperature": value.temperature, "humidity": Double(value.humidity), "voltage": value.voltage, "timestamp": date.timeIntervalSince1970]
             try JSONSerialization.data(withJSONObject: payload).write(to: path, options: .atomic)
             WidgetCenter.shared.reloadTimelines(ofKind: "XiaomiSensorWidget")
-        } catch { status = "Widget data could not be saved: \(error.localizedDescription)" }
+            return true
+        } catch {
+            return false
+        }
     }
     private func stopCurrent() {
         timer?.cancel(); timeout?.cancel(); historyTimeout?.cancel()
@@ -398,7 +401,7 @@ struct ContentView: View {
                 }.labelsHidden().frame(width: 145)
             }
             Divider()
-            Text("Closing the window keeps monitoring in the menu bar. Quit the app to stop.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text("Closing the window or pressing Command-Q keeps monitoring in the menu bar. Choose Stop Monitoring and Quit in the menu bar to stop.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }.padding(18).frame(width: 340)
     }
     private func metric(_ title: String, _ value: String, _ icon: String, _ tint: Color) -> some View {
@@ -547,8 +550,13 @@ struct HistoryCharts: View {
 }
 
 final class ApplicationDelegate: NSObject, NSApplicationDelegate {
+    private var monitoringActivity: NSObjectProtocol?
     func applicationDidFinishLaunching(_ notification: Notification) {
         ProcessInfo.processInfo.disableAutomaticTermination("Scheduled sensor monitoring")
+        monitoringActivity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep], reason: "Scheduled Bluetooth sensor readings")
+    }
+    func applicationWillTerminate(_ notification: Notification) {
+        if let activity = monitoringActivity { ProcessInfo.processInfo.endActivity(activity) }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }
@@ -572,7 +580,7 @@ struct SensorMenu: View {
         }
         Button("Read now") { sensor.begin(history: false) }.disabled(sensor.selectedID == nil || sensor.importing)
         Divider()
-        Button("Quit Xiaomi Sensor") { NSApp.terminate(nil) }
+        Button("Stop Monitoring and Quit") { NSApp.terminate(nil) }
     }
 }
 
@@ -580,7 +588,15 @@ struct SensorMenu: View {
     @NSApplicationDelegateAdaptor(ApplicationDelegate.self) private var appDelegate
     @StateObject private var sensor = Sensor()
     var body: some Scene {
-        Window("Xiaomi Sensor", id: "main") { ContentView(sensor: sensor) }.defaultSize(width: 960, height: 800)
+        Window("Xiaomi Sensor", id: "main") { ContentView(sensor: sensor) }
+            .defaultSize(width: 960, height: 800)
+            .commands {
+                CommandGroup(replacing: .appTermination) {
+                    Button("Close Window and Keep Monitoring") { NSApp.hide(nil) }
+                        .keyboardShortcut("q", modifiers: .command)
+                    Button("Stop Monitoring and Quit") { NSApp.terminate(nil) }
+                }
+            }
         MenuBarExtra("Xiaomi Sensor", systemImage: "thermometer.medium") { SensorMenu(sensor: sensor) }
     }
 }
