@@ -17,4 +17,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v2.0.0 build/Xiaomi-Sensor.dmg --target "$GITHUB_SHA" --title "Xiaomi Sensor 2.0.0" --notes "Adds a macOS background item that restarts the monitor without a Dock icon after quitting, and imports newer sensor history after readings. Allow the background item in System Settings if prompted. Widget refresh timing is controlled by macOS. Registration, Bluetooth and incremental history require testing on a physical Mac and sensor. Requires macOS 14 or newer; ad-hoc signed and not notarized."
+          gh release create v2.0.1 build/Xiaomi-Sensor.dmg --target "$GITHUB_SHA" --title "Xiaomi Sensor 2.0.1" --notes "Improves widget contrast in tinted desktop rendering. Includes background monitoring and incremental history introduced in 2.0. The widget, background item and Bluetooth remain unverified on physical hardware. Requires macOS 14 or newer; ad-hoc signed and not notarized."
