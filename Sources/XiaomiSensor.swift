@@ -429,12 +429,19 @@ struct ContentView: View {
             }
         }.padding(22).frame(minWidth: 740, minHeight: 640)
     }
+    private var backgroundServiceStatus: String {
+        switch SMAppService.agent(plistName: "com.namak1.xiaomisensor.background.plist").status {
+        case .enabled: return "Background item registered. Keep the app running if automatic restart fails."
+        case .requiresApproval: return "Allow background monitoring in System Settings → General → Login Items & Extensions."
+        case .notFound: return "Background monitoring could not be found. Reopen the app or reinstall it."
+        case .notRegistered: return "Background monitoring is not registered. Reopen the app to retry."
+        @unknown default: return "Background monitoring is unavailable. Keep the app open to continue readings."
+        }
+    }
     private var settings: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Sensor settings").font(.headline)
-            Text(SMAppService.agent(plistName: "com.namak1.xiaomisensor.background.plist").status == .enabled
-                 ? "Background monitoring: enabled"
-                 : "Background monitoring requires approval in System Settings → General → Login Items & Extensions.")
+            Text(backgroundServiceStatus)
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Text("Sensor")
@@ -606,7 +613,19 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     private var monitoringActivity: NSObjectProtocol?
     func applicationDidFinishLaunching(_ notification: Notification) {
         if CommandLine.arguments.contains("--background") { NSApp.setActivationPolicy(.accessory); DispatchQueue.main.asyncAfter(deadline: .now() + 1) { NSApp.hide(nil) } }
-        do { let service = SMAppService.agent(plistName: "com.namak1.xiaomisensor.background.plist"); if service.status == .notRegistered { try service.register() } } catch { NSLog("Background service registration failed: %@", error.localizedDescription) }
+        do {
+            let service = SMAppService.agent(plistName: "com.namak1.xiaomisensor.background.plist")
+            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+            let key = "backgroundServiceBundleVersion"
+            // macOS requires re-registration when the embedded launcher changes.
+            if service.status == .enabled, UserDefaults.standard.string(forKey: key) != version {
+                try service.unregister()
+            }
+            if service.status == .notRegistered || service.status == .notFound {
+                try service.register()
+            }
+            if service.status == .enabled { UserDefaults.standard.set(version, forKey: key) }
+        } catch { NSLog("Background service registration failed: %@", error.localizedDescription) }
         ProcessInfo.processInfo.disableAutomaticTermination("Scheduled sensor monitoring")
         monitoringActivity = ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep], reason: "Scheduled Bluetooth sensor readings")
     }
