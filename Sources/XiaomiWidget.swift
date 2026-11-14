@@ -162,6 +162,13 @@ struct SensorWidgetView: View {
             ZStack {
                 RoundedRectangle(cornerRadius: unit * 0.12)
                     .fill(usesTint ? Color.clear : Color(red: 0.92, green: 0.92, blue: 0.92))
+                Text(entry.updated.map { "Updated " + $0.formatted(date: .omitted, time: .shortened) } ?? "No reading yet")
+                    .font(.system(size: unit * 0.045, weight: .medium))
+                    .foregroundStyle(usesTint ? Color.primary.opacity(0.8) : Color.black.opacity(0.65))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(width: unit * 0.70)
+                    .position(x: unit * 0.5, y: unit * 0.085)
                 RoundedRectangle(cornerRadius: unit * 0.018)
                     .fill(usesTint ? Color.primary.opacity(0.16) : Color(red: 0.59, green: 0.59, blue: 0.58))
                     .overlay(RoundedRectangle(cornerRadius: unit * 0.018)
