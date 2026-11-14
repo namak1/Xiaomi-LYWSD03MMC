@@ -14,11 +14,25 @@ A native Bluetooth monitor for Xiaomi LYWSD03MMC, with a macOS desktop widget. T
 
 ## Installation
 
-Download the DMG from [Releases](../../releases), open it and drag Xiaomi Sensor into Applications. Open the app and grant Bluetooth access, then select your nearby sensor. To add the widget, right-click the desktop, choose **Edit Widgets**, search for **Xiaomi Sensor** and add it. The app registers a macOS background item which restarts the monitor without a Dock icon after the app quits. If required, allow the item under System Settings → General → Login Items & Extensions. The app must be running to collect readings. The ad-hoc signed background launcher can be rejected by macOS code-signing launch constraints even when it appears registered; if this happens, keep the app running and check the menu bar for the next scheduled reading. A properly signed distribution is needed to resolve this for affected installations.
+Download the DMG from [Releases](../../releases), open it and drag Xiaomi Sensor into Applications. Open the app and grant Bluetooth access, then select your nearby sensor. To add the widget, right-click the desktop, choose **Edit Widgets**, search for **Xiaomi Sensor** and add it. The app must run to collect readings. It registers a macOS background item to restart monitoring after the app quits. On some Macs, macOS rejects the ad-hoc signed launcher even when it appears registered. If that happens, use the optional per-user fallback below.
 
-macOS controls when the widget refreshes, so exact timing is not guaranteed. Disable the background item there to stop background monitoring. Checks due during sleep resume after the Mac wakes. Choose the interval in the main window; use Read now for a manual sample. After each reading the monitor reconnects and imports newer stored hourly minimum/maximum records. Use Import sensor history to retry and Export CSV to save them. Import can take several minutes. Historic timestamps are estimated from sensor uptime; a reset or firmware differences can affect dates and availability. The app does not wake a sleeping Mac.
+macOS controls when the widget refreshes, so exact timing is not guaranteed. Disable the background item in System Settings → General → Login Items & Extensions to stop it; if the fallback below is enabled, disable that separately as well. Checks due during sleep resume after the Mac wakes. Choose the interval in the main window; use Read now for a manual sample. After each reading the monitor reconnects and imports newer stored hourly minimum/maximum records. Use Import sensor history to retry and Export CSV to save them. Import can take several minutes. Historic timestamps are estimated from sensor uptime; a reset or firmware differences can affect dates and availability. The app does not wake a sleeping Mac.
 
 The widget displays the last recorded reading and its age. WidgetKit controls refreshes, so the widget is not continuously live. Desktop widget registration and Bluetooth connection have not been verified on physical hardware. The ad-hoc signed build is not notarized; macOS may require **System Settings → Privacy & Security → Open Anyway**. The widget reads a local snapshot shared by the app. If the widget does not appear, ensure the app is installed in Applications and launched once. Ad-hoc signing can prevent widget discovery on some macOS versions; this build has not been tested in the widget gallery on a physical Mac.
+
+## Optional background monitor fallback
+
+If the background item fails to restart the app, install the app in `/Applications`, open it once and select a sensor. Then, from a checkout of this repository, run:
+
+```sh
+bash scripts/background-monitor.sh enable
+```
+
+This installs a per-user launch agent which checks every minute whether Xiaomi Sensor is running and starts it hidden if needed. It continues after logout and login. Quit the app to test: the restart, sensor connection and widget refresh may take longer than a minute. The Mac must be awake. This agent is separate from the app's built-in background item, and quitting the app alone will not stop the fallback. To disable the fallback:
+
+```sh
+bash scripts/background-monitor.sh disable
+```
 
 ## Compatibility
 
