@@ -45,7 +45,8 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
     @Published var selectedID: UUID?
     @Published var intervalMinutes: Int {
         didSet {
-            intervalMinutes = max(5, min(1440, intervalMinutes))
+            let clamped = max(1, min(1440, intervalMinutes))
+            if clamped != intervalMinutes { intervalMinutes = clamped; return }
             UserDefaults.standard.set(intervalMinutes, forKey: "intervalMinutes")
             if !busy { scheduleNext() }
         }
@@ -75,7 +76,7 @@ final class Sensor: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeri
     }
     override init() {
         let saved = UserDefaults.standard.integer(forKey: "intervalMinutes")
-        intervalMinutes = saved == 0 ? 60 : max(5, min(1440, saved))
+        intervalMinutes = saved == 0 ? 60 : max(1, min(1440, saved))
         super.init()
         if let s = UserDefaults.standard.string(forKey: "selectedSensorUUID") { selectedID = UUID(uuidString: s) }
         load()
@@ -457,7 +458,7 @@ struct ContentView: View {
                 Text("Check every")
                 Spacer()
                 Picker("Check every", selection: $sensor.intervalMinutes) {
-                    Text("5 minutes").tag(5); Text("15 minutes").tag(15); Text("30 minutes").tag(30); Text("1 hour").tag(60); Text("2 hours").tag(120); Text("6 hours").tag(360); Text("12 hours").tag(720); Text("24 hours").tag(1440)
+                    Text("1 minute").tag(1); Text("5 minutes").tag(5); Text("15 minutes").tag(15); Text("30 minutes").tag(30); Text("1 hour").tag(60); Text("2 hours").tag(120); Text("6 hours").tag(360); Text("12 hours").tag(720); Text("24 hours").tag(1440)
                 }.labelsHidden().frame(width: 145)
             }
             Divider()
